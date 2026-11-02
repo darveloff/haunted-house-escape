@@ -1,0 +1,12 @@
+# Keep GitHub's language bar to the actual code: Unity data files and
+# third-party art packs aren't hand-written source.
+*.mat linguist-generated
+*.asset linguist-generated
+*.controller linguist-generated
+*.unity linguist-generated
+*.prefab linguist-generated
+*.meta linguist-generated
+*.json linguist-generated
+Assets/Modular[[:space:]]Space[[:space:]]Kit[[:space:]]1.0/** linguist-vendored
+Assets/Mini[[:space:]]Characters/** linguist-vendored
+Assets/TutorialInfo/** linguist-vendored

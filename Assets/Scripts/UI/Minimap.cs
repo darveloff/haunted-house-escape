@@ -62,7 +62,7 @@ public class Minimap : MonoBehaviour
             keys.Add((key.transform, UIStyle.Icon("Key", map, UIStyle.KeyIcon, UIStyle.Gold, 26).rectTransform));
         foreach (var ghost in FindObjectsByType<GhostAI>(FindObjectsSortMode.None))
         {
-            var icon = UIStyle.Icon("Ghost", map, UIStyle.GhostIcon, ghost.Profile.color, 30);
+            var icon = UIStyle.Icon("Ghost", map, UIStyle.GhostIconFor(ghost.kind), ghost.Profile.color, 30);
             icon.gameObject.AddComponent<Outline>().effectColor = UIStyle.Ink;
             ghosts.Add((ghost.transform, icon.rectTransform));
         }

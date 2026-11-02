@@ -175,9 +175,14 @@ public static class HauntedHouseMapBuilder
         BuildExitZone();
 
         BuildLighting();
-        new GameObject("GameManager").AddComponent<GameManager>();
+        new GameObject("GameManager").AddComponent<GameManager>().fxMaterial = FxSpriteMaterial();
+        int charactersLayer = SetupSilhouettes();
         var player = BuildPlayer();
         BuildGhosts();
+        // Player and ghosts on their own layer so the silhouette pass can draw them behind walls.
+        SetLayerRecursive(player, charactersLayer);
+        foreach (var ghost in Object.FindObjectsByType<GhostAI>(FindObjectsSortMode.None))
+            SetLayerRecursive(ghost.gameObject, charactersLayer);
         BuildKeys();
         SetupCamera(player.transform);
 
@@ -616,6 +621,138 @@ public static class HauntedHouseMapBuilder
         }
     }
 
+    // ---------------------------------------------------------------- silhouettes
+
+    const string CharactersLayerName = "Characters";
+
+    static void SetLayerRecursive(GameObject go, int layer)
+    {
+        foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = layer;
+    }
+
+    // Adds a "Characters" layer and, to every URP renderer in the project, Render Objects passes
+    // that draw characters as a soft silhouette wherever a wall hides them. Each character type
+    // gets a mask pass (stencil-marks its visible pixels) and a silhouette pass (depth Greater,
+    // skipping marked pixels) so a character never shows a silhouette over its own body.
+    static readonly string[] SilhouettePassNames = { "PlayerMask", "PlayerSilhouette", "GhostMask", "GhostSilhouette" };
+
+    static int SetupSilhouettes()
+    {
+        int layer = EnsureLayer(CharactersLayerName);
+        if (layer < 0)
+        {
+            Debug.LogWarning("HauntedHouse: no free layer for Characters; silhouettes skipped.");
+            return 0;
+        }
+
+        var maskMat = SilhouetteMaterial("Silhouette_Mask", new Color(0f, 0f, 0f, 0f));
+        var playerMat = SilhouetteMaterial("Silhouette_Player", new Color(1f, 1f, 1f, 0.45f));
+        var ghostMat = SilhouetteMaterial("Silhouette_Ghost", new Color(0.65f, 0.85f, 1f, 0.3f));
+        var opaque = UnityEngine.Rendering.Universal.RenderQueueType.Opaque;
+        var transparent = UnityEngine.Rendering.Universal.RenderQueueType.Transparent;
+        var afterOpaques = UnityEngine.Rendering.Universal.RenderPassEvent.AfterRenderingOpaques;
+        var afterTransparents = UnityEngine.Rendering.Universal.RenderPassEvent.AfterRenderingTransparents;
+
+        foreach (var guid in AssetDatabase.FindAssets("t:UniversalRendererData", new[] { "Assets" }))
+        {
+            var data = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.UniversalRendererData>(AssetDatabase.GUIDToAssetPath(guid));
+            if (data == null) continue;
+
+            // Rebuild our passes from scratch so their order is always right.
+            foreach (var old in data.rendererFeatures.Where(f => f != null && SilhouettePassNames.Contains(f.name)).ToList())
+            {
+                data.rendererFeatures.Remove(old);
+                Object.DestroyImmediate(old, true);
+            }
+            AddPass(data, "PlayerMask", opaque, afterOpaques, layer, maskMat, CompareFunction.LessEqual, CompareFunction.Always, StencilOp.Replace);
+            AddPass(data, "PlayerSilhouette", opaque, afterOpaques, layer, playerMat, CompareFunction.Greater, CompareFunction.NotEqual, StencilOp.Keep);
+            AddPass(data, "GhostMask", transparent, afterTransparents, layer, maskMat, CompareFunction.LessEqual, CompareFunction.Always, StencilOp.Replace);
+            AddPass(data, "GhostSilhouette", transparent, afterTransparents, layer, ghostMat, CompareFunction.Greater, CompareFunction.NotEqual, StencilOp.Keep);
+
+            // The renderer keeps a parallel list of its features' local file IDs; resync it.
+            var so = new SerializedObject(data);
+            var map = so.FindProperty("m_RendererFeatureMap");
+            map.arraySize = data.rendererFeatures.Count;
+            for (int n = 0; n < data.rendererFeatures.Count; n++)
+            {
+                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(data.rendererFeatures[n], out string _, out long localId);
+                map.GetArrayElementAtIndex(n).longValue = localId;
+            }
+            so.ApplyModifiedPropertiesWithoutUndo();
+            data.SetDirty();
+            EditorUtility.SetDirty(data);
+        }
+        AssetDatabase.SaveAssets();
+        return layer;
+    }
+
+    static void AddPass(UnityEngine.Rendering.Universal.UniversalRendererData data, string name,
+        UnityEngine.Rendering.Universal.RenderQueueType queue, UnityEngine.Rendering.Universal.RenderPassEvent evt,
+        int layer, Material mat, CompareFunction depthTest, CompareFunction stencilTest, StencilOp stencilPass)
+    {
+        var feature = ScriptableObject.CreateInstance<UnityEngine.Rendering.Universal.RenderObjects>();
+        feature.name = name;
+        var st = feature.settings;
+        st.passTag = name;
+        st.Event = evt;
+        st.filterSettings.RenderQueueType = queue;
+        st.filterSettings.LayerMask = 1 << layer;
+        st.overrideMaterial = mat;
+        st.overrideMaterialPassIndex = 0;
+        st.overrideDepthState = true;
+        st.depthCompareFunction = depthTest;
+        st.enableWrite = false;
+        st.stencilSettings.overrideStencilState = true;
+        st.stencilSettings.stencilReference = 1;
+        st.stencilSettings.stencilCompareFunction = stencilTest;
+        st.stencilSettings.passOperation = stencilPass;
+        st.stencilSettings.failOperation = StencilOp.Keep;
+        st.stencilSettings.zFailOperation = StencilOp.Keep;
+        AssetDatabase.AddObjectToAsset(feature, data);
+        data.rendererFeatures.Add(feature);
+    }
+
+    static int EnsureLayer(string layerName)
+    {
+        var tagManager = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
+        var layers = tagManager.FindProperty("layers");
+        for (int i = 0; i < layers.arraySize; i++)
+            if (layers.GetArrayElementAtIndex(i).stringValue == layerName) return i;
+        for (int i = 8; i < layers.arraySize; i++)
+        {
+            if (!string.IsNullOrEmpty(layers.GetArrayElementAtIndex(i).stringValue)) continue;
+            layers.GetArrayElementAtIndex(i).stringValue = layerName;
+            tagManager.ApplyModifiedPropertiesWithoutUndo();
+            return i;
+        }
+        return -1;
+    }
+
+    // Flat see-through colour, no lighting.
+    static Material SilhouetteMaterial(string name, Color color)
+    {
+        string path = OutPath + name + ".mat";
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (mat == null)
+        {
+            mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            AssetDatabase.CreateAsset(mat, path);
+        }
+        mat.SetColor("_BaseColor", color);
+        mat.SetFloat("_Surface", 1f);
+        mat.SetFloat("_Blend", 0f);
+        mat.SetOverrideTag("RenderType", "Transparent");
+        mat.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+        mat.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        mat.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+        mat.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+        mat.SetFloat("_ZWrite", 0f);
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.renderQueue = (int)RenderQueue.Transparent;
+        EditorUtility.SetDirty(mat);
+        return mat;
+    }
+
     // ---------------------------------------------------------------- characters
 
     static GameObject BuildPlayer()
@@ -836,13 +973,60 @@ public static class HauntedHouseMapBuilder
     [MenuItem("Tools/Haunted House/Debug/Pause")] static void DebugPause() => GameManager.Instance?.Pause();
     [MenuItem("Tools/Haunted House/Debug/Caught By Wraith")] static void DebugCaught() => GameManager.Instance?.LoseCaught(GhostKind.Wraith);
     [MenuItem("Tools/Haunted House/Debug/Escaped")] static void DebugEscaped() => GameManager.Instance?.Win();
+    [MenuItem("Tools/Haunted House/Debug/Collect Key")] static void DebugCollectKey() => GameManager.Instance?.CollectKey();
+    // Records frames for the README GIF (run after Debug > Start Game). Keeps the editor
+    // ticking while it records, since it barely updates when it's in the background.
+    [MenuItem("Tools/Haunted House/Debug/Record Gameplay GIF Frames")]
+    static void DebugRecordGif()
+    {
+        var player = Object.FindAnyObjectByType<PlayerController>();
+        if (!EditorApplication.isPlaying || player == null) return;
+        player.gameObject.AddComponent<DemoPilot>();
+        void Pump()
+        {
+            if (!EditorApplication.isPlaying || player == null || player.GetComponent<DemoPilot>() == null)
+            {
+                EditorApplication.update -= Pump;
+                return;
+            }
+            EditorApplication.QueuePlayerLoopUpdate();
+            UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+        }
+        EditorApplication.update += Pump;
+    }
+
+    // Puts the player just inside the Foyer's south wall, where the wall hides them from the camera.
+    [MenuItem("Tools/Haunted House/Debug/Stand Behind Wall")]
+    static void DebugStandBehindWall()
+    {
+        var player = Object.FindAnyObjectByType<PlayerController>();
+        if (player == null) return;
+        var cc = player.GetComponent<CharacterController>();
+        cc.enabled = false;
+        player.transform.position = new Vector3(-3f, 0.1f, -8.6f);
+        cc.enabled = true;
+    }
+    [MenuItem("Tools/Haunted House/Debug/Preview Phone Controls")]
+    static void DebugTogglePhoneControls()
+    {
+        bool on = PlayerPrefs.GetInt("hh_preview_touch", 0) == 0;
+        PlayerPrefs.SetInt("hh_preview_touch", on ? 1 : 0);
+        Debug.Log($"HauntedHouse: phone controls preview {(on ? "ON" : "OFF")} (takes effect next Play)");
+    }
+    [MenuItem("Tools/Haunted House/Debug/Reset Best Time + Tutorial")]
+    static void DebugResetSave()
+    {
+        PlayerPrefs.DeleteKey("hh_best_time");
+        PlayerPrefs.DeleteKey("hh_best_stars");
+        PlayerPrefs.DeleteKey("hh_tutorial_done");
+        Debug.Log("HauntedHouse: best time, stars and tutorial reset");
+    }
 
     [MenuItem("Tools/Haunted House/Debug/Log Canvases")]
     static void LogCanvases()
     {
         foreach (var c in Resources.FindObjectsOfTypeAll<Canvas>())
             Debug.Log($"Canvas {c.name} active={c.gameObject.activeInHierarchy} flags={c.gameObject.hideFlags} scene={c.gameObject.scene.name} enabled={c.enabled}");
-        Debug.Log($"Previews: {Object.FindObjectsByType<EditModePreview>(FindObjectsSortMode.None).Length}");
     }
 
     [MenuItem("Tools/Haunted House/Capture Game View")]
@@ -1014,8 +1198,6 @@ public static class HauntedHouseMapBuilder
         // before you press Play. CameraFollow takes over from here at runtime.
         cam.transform.position = player.position + new Vector3(0f, 26f, -24f);
         cam.transform.LookAt(player.position + Vector3.forward * 20f);
-
-        new GameObject("EditModePreview").AddComponent<EditModePreview>();
     }
 
     static void AddSceneToBuild()

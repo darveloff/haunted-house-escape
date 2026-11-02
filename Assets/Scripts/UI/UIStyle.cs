@@ -299,6 +299,51 @@ public static class UIStyle
         return (head || body) && !eye;
     });
 
+    // Each ghost type gets its own silhouette detail so they're readable without colour:
+    // Wisp = plain, Wraith = horns + angry eyes, Watcher = one big eye, Screamer = open mouth.
+    public static Sprite GhostIconFor(GhostKind kind)
+    {
+        switch (kind)
+        {
+            case GhostKind.Wraith:
+                return ShapeIcon("ghost_wraith", (x, y) =>
+                {
+                    bool body = GhostBody(x, y);
+                    // Horns: two triangles rising from the top of the head.
+                    float hx = Mathf.Abs(x) - 0.42f;
+                    bool horn = y > 0.45f && y < 0.98f && Mathf.Abs(hx + (y - 0.45f) * 0.25f) < (0.98f - y) * 0.32f;
+                    // Angry eyes: slanted cut across the top of each eye.
+                    float ex = Mathf.Abs(x) - 0.26f, ey = y - 0.12f;
+                    bool eye = new Vector2(ex, ey).magnitude < 0.14f && ey < 0.07f + ex * 0.55f;
+                    return (body || horn) && !eye;
+                });
+            case GhostKind.Watcher:
+                return ShapeIcon("ghost_watcher", (x, y) =>
+                {
+                    float r = new Vector2(x, y - 0.15f).magnitude;
+                    bool hole = r < 0.27f && r > 0.11f; // big single eye with a pupil
+                    return GhostBody(x, y) && !hole;
+                });
+            case GhostKind.Screamer:
+                return ShapeIcon("ghost_screamer", (x, y) =>
+                {
+                    bool eye = new Vector2(Mathf.Abs(x) - 0.26f, y - 0.25f).magnitude < 0.1f;
+                    bool mouth = new Vector2(x / 0.16f, (y + 0.15f) / 0.24f).magnitude < 1f; // wide-open "O"
+                    return GhostBody(x, y) && !eye && !mouth;
+                });
+            default:
+                return GhostIcon;
+        }
+    }
+
+    static bool GhostBody(float x, float y)
+    {
+        bool head = new Vector2(x, y - 0.1f).magnitude < 0.68f && y >= 0.1f;
+        float bottom = -0.72f + 0.14f * Mathf.Cos(x * Mathf.PI * 3.2f);
+        bool body = Mathf.Abs(x) < 0.68f && y < 0.1f && y > bottom;
+        return head || body;
+    }
+
     public static Sprite ArrowIcon => ShapeIcon("arrow", (x, y) =>
     {
         // Upward-pointing chevron.
@@ -310,6 +355,26 @@ public static class UIStyle
     });
 
     public static Sprite DotIcon => ShapeIcon("dot", (x, y) => new Vector2(x, y).magnitude < 0.9f);
+
+    // Five-point star (10-vertex polygon, point-in-polygon test).
+    public static Sprite StarIcon => ShapeIcon("star", (x, y) =>
+    {
+        var pts = new Vector2[10];
+        for (int i = 0; i < 10; i++)
+        {
+            float a = Mathf.PI / 2f + i * Mathf.PI / 5f;
+            float r = i % 2 == 0 ? 0.95f : 0.42f;
+            pts[i] = new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r - 0.05f);
+        }
+        bool inside = false;
+        for (int i = 0, j = 9; i < 10; j = i++)
+        {
+            if ((pts[i].y > y) != (pts[j].y > y) &&
+                x < (pts[j].x - pts[i].x) * (y - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x)
+                inside = !inside;
+        }
+        return inside;
+    });
 
     public static Sprite RingIcon => ShapeIcon("ring", (x, y) =>
     {

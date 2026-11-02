@@ -109,6 +109,7 @@ public class GhostAI : MonoBehaviour
         nextMoan = Time.time + Random.Range(1f, 6f);
 
         GoToNextWaypoint();
+        if (GameManager.Instance != null) GameManager.Instance.HuntStarted += OnHuntStarted;
     }
 
     void Update()
@@ -134,7 +135,7 @@ public class GhostAI : MonoBehaviour
             case GhostState.Chase:
                 agent.isStopped = IsScreaming;
                 agent.updateRotation = true;
-                agent.speed = p.chaseSpeed;
+                agent.speed = p.chaseSpeed * Threat;
                 if (Time.time >= nextRepath)
                 {
                     agent.SetDestination(lastKnownPosition);
@@ -163,7 +164,7 @@ public class GhostAI : MonoBehaviour
                 break;
 
             case GhostState.Patrol:
-                agent.speed = p.patrolSpeed;
+                agent.speed = p.patrolSpeed * Threat;
                 if (!agent.pathPending && agent.remainingDistance < 0.6f)
                     GoToNextWaypoint();
                 break;
@@ -248,9 +249,10 @@ public class GhostAI : MonoBehaviour
         float dist = toTarget.magnitude;
 
         if (dist < touchRange) return true;
-        if (player.IsSprinting && dist < p.hearingRange) return true;
+        float senses = 1f + (Threat - 1f) * 0.6f;
+        if (player.IsSprinting && dist < p.hearingRange * senses) return true;
 
-        if (dist > p.sightRange) return false;
+        if (dist > p.sightRange * senses) return false;
         Vector3 flat = new Vector3(toTarget.x, 0f, toTarget.z);
         if (Vector3.Angle(transform.forward, flat) > p.viewAngle * 0.5f) return false;
 
@@ -259,10 +261,35 @@ public class GhostAI : MonoBehaviour
         return false;
     }
 
+    // Speed/senses multiplier from the game's threat level (rises with each key).
+    float Threat => GameManager.Instance != null ? GameManager.Instance.Threat : 1f;
+
     void GoToNextWaypoint()
     {
+        // During the hunt, roam around the exit instead of the usual route.
+        var gm = GameManager.Instance;
+        if (gm != null && gm.HuntActive)
+        {
+            Vector3 target = gm.ExitPosition + Quaternion.Euler(0f, Random.Range(0f, 360f), 0f) * Vector3.forward * Random.Range(4f, 12f);
+            if (NavMesh.SamplePosition(target, out var hit, 4f, NavMesh.AllAreas))
+            {
+                agent.SetDestination(hit.position);
+                return;
+            }
+        }
+
         if (waypoints == null || waypoints.Length == 0) return;
         agent.SetDestination(waypoints[waypointIndex].position);
         waypointIndex = (waypointIndex + 1) % waypoints.Length;
+    }
+
+    void OnHuntStarted()
+    {
+        if (state == GhostState.Patrol && agent != null && agent.isOnNavMesh) GoToNextWaypoint();
+    }
+
+    void OnDestroy()
+    {
+        if (GameManager.Instance != null) GameManager.Instance.HuntStarted -= OnHuntStarted;
     }
 }

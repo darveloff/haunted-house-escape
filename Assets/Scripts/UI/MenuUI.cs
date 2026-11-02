@@ -72,21 +72,53 @@ public class MenuUI : MonoBehaviour
         pauseStatus.text = $"KEYS  {gm.KeysCollected}/{gm.keysRequired}     {s / 60:00}:{s % 60:00} LEFT";
         int tip = Random.Range(0, Tips.Length);
         pauseTip.text = Tips[tip];
-        pauseTipGhost.color = GhostAI.Profiles[Mathf.Min(tip, GhostAI.Profiles.Length - 1)].color;
+        int tipKind = Mathf.Min(tip, GhostAI.Profiles.Length - 1);
+        pauseTipGhost.color = GhostAI.Profiles[tipKind].color;
+        pauseTipGhost.sprite = UIStyle.GhostIconFor((GhostKind)tipKind);
         pause.SetActive(true);
     }
 
-    public void ShowEscaped()
+    public void ShowEscaped(int stars, bool newBest)
     {
-        BuildEnd(new Color(0.02f, 0.12f, 0.06f, 0.55f), "YOU\nESCAPED!", "<color=#7CFF8E>FREE AT LAST</color>",
+        var screen = BuildEnd(new Color(0.02f, 0.12f, 0.06f, 0.55f), "YOU\nESCAPED!", "<color=#7CFF8E>FREE AT LAST</color>",
             UIStyle.KeyIcon, UIStyle.Gold, "FREEDOM!", celebrate: true);
+
+        // Star rating next to the stat pills.
+        var row = UIStyle.Rect("Stars", screen);
+        row.anchorMin = row.anchorMax = row.pivot = new Vector2(0, 1);
+        row.anchoredPosition = new Vector2(790, -560);
+        string[] labels = { "ESCAPED", "UNDER " + SaveData.FormatTime(SaveData.FastEscapeSeconds), "UNSEEN" };
+        for (int i = 0; i < 3; i++)
+        {
+            bool earned = i < stars;
+            var star = UIStyle.Icon("Star", row, UIStyle.StarIcon, earned ? UIStyle.Gold : new Color(1, 1, 1, 0.18f), 100);
+            UIStyle.Anchor(star.rectTransform, new Vector2(0, 1), new Vector2(i * 130, 0), new Vector2(100, 100));
+            star.rectTransform.pivot = new Vector2(0, 1);
+            foreach (var d in new[] { new Vector2(4, -4), new Vector2(-4, 4) })
+            {
+                var o = star.gameObject.AddComponent<Outline>();
+                o.effectColor = UIStyle.Ink;
+                o.effectDistance = d;
+            }
+            UIAnim.Add(star.rectTransform, 0.6f + i * 0.15f, wobble: earned ? 4f : 0f, phase: i);
+            var label = UIStyle.Label("Label", row, 18, earned ? UIStyle.Paper : new Color(1, 1, 1, 0.4f));
+            UIStyle.Anchor(label.rectTransform, new Vector2(0, 1), new Vector2(i * 130 - 15, -110), new Vector2(130, 26));
+            label.rectTransform.pivot = new Vector2(0, 1);
+            label.text = labels[i];
+        }
+
+        // Personal best.
+        var best = UIStyle.Sticker("Best", screen, newBest ? 56 : 34, newBest ? UIStyle.Gold : UIStyle.Paper, 6f);
+        Place(best.rectTransform, new Vector2(newBest ? 640 : 680, -150), new Vector2(520, 80), TextAnchor.MiddleLeft);
+        best.text = newBest ? "NEW BEST!" : $"BEST  {SaveData.FormatTime(SaveData.BestTime)}";
+        UIAnim.Add(best.rectTransform, 0.9f, wobble: newBest ? 4f : 1f);
     }
 
     public void ShowCaught(GhostKind kind)
     {
         var p = GhostAI.Profiles[(int)kind];
         BuildEnd(new Color(0.14f, 0.02f, 0.03f, 0.55f), "CAUGHT!", $"BY THE <color=#{ColorUtility.ToHtmlStringRGB(p.color)}>{p.name}</color>",
-            UIStyle.GhostIcon, p.color, "BOO!", celebrate: false);
+            UIStyle.GhostIconFor(kind), p.color, "BOO!", celebrate: false);
     }
 
     public void ShowTimeUp()
@@ -158,6 +190,14 @@ public class MenuUI : MonoBehaviour
 
     static void ControlsRow(RectTransform parent)
     {
+        if (VirtualInput.IsTouchDevice)
+        {
+            // Phones: describe the on-screen controls instead of keys.
+            var hint = UIStyle.Label("TouchHint", parent, 28, new Color(1, 1, 1, 0.8f));
+            UIStyle.Anchor(hint.rectTransform, new Vector2(0.5f, 0), new Vector2(0, 50), new Vector2(1600, 40));
+            hint.text = "DRAG THE JOYSTICK TO MOVE  •  HOLD RUN TO SPRINT  •  TAP PLAY TO START";
+            return;
+        }
         var row = UIStyle.Rect("Controls", parent);
         UIStyle.Anchor(row, new Vector2(0.5f, 0), new Vector2(0, 36), new Vector2(1400, 64));
         var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -180,6 +220,7 @@ public class MenuUI : MonoBehaviour
 
         var goal = MessageBox(screen, $"FIND {gm.keysRequired} KEYS.\nDON'T GET CAUGHT.", new Vector2(120, -500));
         UIAnim.Add(goal.transform.parent, 0.35f);
+        if (SaveData.HasBest) BuildBestRecord(screen);
 
         var buttons = ButtonColumn(screen, new Vector2(120, -680));
         UIStyle.PillButton(buttons, "SPACE", "PLAY", gm.StartGame);
@@ -191,8 +232,27 @@ public class MenuUI : MonoBehaviour
         return screen.gameObject;
     }
 
-    // Tilted HAUNTED HOUSE stickers with the red ESCAPE tag. Shared with the edit-mode preview,
-    // which passes animate: false because UIAnim doesn't tick outside Play mode.
+    // "BEST 03:12" plus the best star rating, beside the goal box on the title screen.
+    static void BuildBestRecord(RectTransform screen)
+    {
+        var pill = UIStyle.Panel("Best", screen, radius: 22, border: 5);
+        var rt = pill.rectTransform;
+        UIStyle.Anchor(rt, new Vector2(0, 1), new Vector2(580, -500), new Vector2(330, 112));
+        rt.pivot = new Vector2(0, 1);
+        var label = UIStyle.Label("Text", pill.transform, 30, UIStyle.Paper);
+        UIStyle.Anchor(label.rectTransform, new Vector2(0.5f, 1), new Vector2(0, -12), new Vector2(320, 44));
+        label.rectTransform.pivot = new Vector2(0.5f, 1);
+        label.text = $"BEST  {SaveData.FormatTime(SaveData.BestTime)}";
+        for (int i = 0; i < 3; i++)
+        {
+            var star = UIStyle.Icon("Star", pill.transform, UIStyle.StarIcon, i < SaveData.BestStars ? UIStyle.Gold : new Color(1, 1, 1, 0.2f), 40);
+            UIStyle.Anchor(star.rectTransform, new Vector2(0.5f, 0), new Vector2((i - 1) * 48, 12), new Vector2(40, 40));
+            star.rectTransform.pivot = new Vector2(0.5f, 0);
+        }
+        UIAnim.Add(rt, 0.4f, wobble: 1.5f);
+    }
+
+    // Tilted HAUNTED HOUSE stickers with the red ESCAPE tag.
     public static void BuildLogo(RectTransform screen, bool animate)
     {
         var logo = Group("Logo", screen, new Vector2(0, 1), new Vector2(110, -60), new Vector2(900, 400));
@@ -291,7 +351,7 @@ public class MenuUI : MonoBehaviour
             floaty.pivot = new Vector2(0.5f, 0.5f);
             var glow = UIStyle.Icon("Glow", floaty, UIStyle.GlowIcon, new Color(p.color.r, p.color.g, p.color.b, 0.55f), 240);
             glow.rectTransform.sizeDelta = new Vector2(240, 240);
-            var icon = UIStyle.Icon("Ghost", floaty, UIStyle.GhostIcon, p.color, 150);
+            var icon = UIStyle.Icon("Ghost", floaty, UIStyle.GhostIconFor((GhostKind)i), p.color, 150);
             foreach (var d in new[] { new Vector2(4, -4), new Vector2(-4, 4) })
                 icon.gameObject.AddComponent<Outline>().effectDistance = d;
             icon.GetComponents<Outline>().ToList().ForEach(o => o.effectColor = UIStyle.Ink);
@@ -397,7 +457,7 @@ public class MenuUI : MonoBehaviour
 
     // ---------------------------------------------------------------- end screens
 
-    void BuildEnd(Color tint, string heading, string sub, Sprite heroSprite, Color heroColor, string shout, bool celebrate)
+    RectTransform BuildEnd(Color tint, string heading, string sub, Sprite heroSprite, Color heroColor, string shout, bool celebrate)
     {
         HideAll();
         var screen = Screen("End", tint);
@@ -450,7 +510,7 @@ public class MenuUI : MonoBehaviour
         UIStyle.Anchor(bubble.rectTransform, new Vector2(1, 0.5f), new Vector2(-560, 290), new Vector2(340, 170));
         bubble.rectTransform.pivot = new Vector2(0.5f, 0.5f);
         bubble.rectTransform.localEulerAngles = new Vector3(0, 0, 5);
-        var shoutText = UIStyle.Label("Text", bubble.transform, shout.Contains("\n") ? 46 : 70, celebrate ? new Color(0.15f, 0.55f, 0.25f) : UIStyle.Ink);
+        var shoutText = UIStyle.Label("Text", bubble.transform, shout.Contains("\n") ? 46 : shout.Length > 5 ? 54 : 70, celebrate ? new Color(0.15f, 0.55f, 0.25f) : UIStyle.Ink);
         shoutText.text = shout;
         UIStyle.Stretch(shoutText.rectTransform);
         UIAnim.Add(bubble.rectTransform, 0.55f, wobble: 3f);
@@ -468,6 +528,7 @@ public class MenuUI : MonoBehaviour
                 UIAnim.Add(k.rectTransform, 0.5f + i * 0.06f, bob: 14f, wobble: 20f, phase: i);
             }
         }
+        return screen;
     }
 
     static void Stat(RectTransform parent, Sprite icon, string value, string label, float delay)

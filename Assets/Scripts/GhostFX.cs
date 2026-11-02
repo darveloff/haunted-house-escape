@@ -128,7 +128,7 @@ public class GhostFX : MonoBehaviour
                 if (ai.IsChasing && ai.Agent != null && ai.Agent.velocity.magnitude > 2.5f && t >= nextAfterimage)
                 {
                     nextAfterimage = t + 0.05f;
-                    var sr = NewSprite("Afterimage", UIStyle.GhostIcon, new Color(color.r, color.g, color.b, 0.5f), 2.2f, null);
+                    var sr = NewSprite("Afterimage", UIStyle.GhostIconFor(ai.kind), new Color(color.r, color.g, color.b, 0.5f), 2.2f, null);
                     sr.transform.position = transform.position + Vector3.up * 1f;
                     fading.Add(new Fading { sr = sr, born = t, life = 0.35f, startScale = 2.2f, endScale = 1.6f, startAlpha = 0.5f, billboard = true });
                 }

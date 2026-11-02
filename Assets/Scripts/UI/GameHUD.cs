@@ -3,20 +3,28 @@ using UnityEngine.UI;
 
 // Builds and updates the in-game HUD:
 //  top-left   hourglass + timer, status message box
-//  top-right  eye + danger meter, key count + key icons
-//  bottom     stamina bar and keycap prompts
+//  top-right  eye + danger meter, key count + key icons (+ pause button on phones)
+//  bottom     stamina bar and keycap prompts (or on-screen controls on phones)
 //  corner     minimap
+//  full-screen red chase vignette and flash effects
 public class GameHUD : MonoBehaviour
 {
     GameManager gm;
     PlayerController player;
     GhostAI[] ghosts;
 
+    CanvasGroup group;
+    Image chaseVignette;
+    Image flash;
+    float flashStart, flashDuration;
+    Color flashColor;
+
     Text timerText;
     Image messagePanel;
     Text messageText;
     float messageUntil;
 
+    Image eyeIcon;
     Image dangerFill;
     Text keysText;
     Image[] keyIcons;
@@ -24,16 +32,13 @@ public class GameHUD : MonoBehaviour
     RectTransform staminaFill;
     Image staminaFillImage;
 
-    Image banner;
-    Text bannerText;
-
     bool wasChased;
 
     public void Build(GameManager manager)
     {
         gm = manager;
 
-        var canvasGo = new GameObject("HUD", typeof(Canvas), typeof(CanvasScaler));
+        var canvasGo = new GameObject("HUD", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasGo.transform.SetParent(transform);
         var canvas = canvasGo.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -43,20 +48,40 @@ public class GameHUD : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         var root = (RectTransform)canvasGo.transform;
         group = canvasGo.AddComponent<CanvasGroup>();
-        group.interactable = group.blocksRaycasts = false;
 
+        chaseVignette = FullScreen("ChaseVignette", root, UIStyle.VignetteSprite);
         BuildTopLeft(root);
-        BuildTopRight(root);
-        BuildBottom(root);
-        BuildBanner(root);
+        BuildTopRight(root, VirtualInput.IsTouchDevice);
+        BuildBottom(root, VirtualInput.IsTouchDevice);
         canvasGo.AddComponent<Minimap>().Build(root);
+        if (VirtualInput.IsTouchDevice) canvasGo.AddComponent<TouchControls>().Build(root);
+        flash = FullScreen("Flash", root, null);
+        SetVisible(false);
     }
-
-    CanvasGroup group;
 
     public void SetVisible(bool visible)
     {
-        if (group != null) group.alpha = visible ? 1f : 0f;
+        if (group == null) return;
+        group.alpha = visible ? 1f : 0f;
+        group.interactable = group.blocksRaycasts = visible;
+    }
+
+    // Full-screen colour flash that fades out (real time, so it works during slow motion).
+    public void Flash(Color color, float duration)
+    {
+        flashColor = color;
+        flashStart = Time.unscaledTime;
+        flashDuration = duration;
+    }
+
+    static Image FullScreen(string name, RectTransform root, Sprite sprite)
+    {
+        var img = UIStyle.Rect(name, root).gameObject.AddComponent<Image>();
+        img.sprite = sprite;
+        img.color = Color.clear;
+        img.raycastTarget = false;
+        UIStyle.Stretch(img.rectTransform);
+        return img;
     }
 
     void BuildTopLeft(RectTransform root)
@@ -69,6 +94,7 @@ public class GameHUD : MonoBehaviour
         UIStyle.Anchor(timerText.rectTransform, new Vector2(0, 1), new Vector2(530, -32), new Vector2(300, 56));
 
         messagePanel = UIStyle.Panel("Message", root);
+        messagePanel.raycastTarget = false;
         var rt = messagePanel.rectTransform;
         rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
         rt.anchoredPosition = new Vector2(460, -104);
@@ -80,18 +106,20 @@ public class GameHUD : MonoBehaviour
         messageText = UIStyle.Label("Text", messagePanel.transform, 30, UIStyle.Paper);
     }
 
-    void BuildTopRight(RectTransform root)
+    void BuildTopRight(RectTransform root, bool touch)
     {
-        var eye = UIStyle.Icon("Eye", root, UIStyle.EyeIcon, UIStyle.Paper, 54);
-        UIStyle.Anchor(eye.rectTransform, new Vector2(1, 1), new Vector2(-858, -36), new Vector2(54, 54));
-        eye.gameObject.AddComponent<Outline>().effectColor = UIStyle.Ink;
+        eyeIcon = UIStyle.Icon("Eye", root, UIStyle.EyeIcon, UIStyle.Paper, 54);
+        UIStyle.Anchor(eyeIcon.rectTransform, new Vector2(1, 1), new Vector2(-858, -36), new Vector2(54, 54));
+        eyeIcon.gameObject.AddComponent<Outline>().effectColor = UIStyle.Ink;
 
         var bar = UIStyle.Panel("DangerBar", root, light: true, radius: 18, border: 5);
+        bar.raycastTarget = false;
         UIStyle.Anchor(bar.rectTransform, new Vector2(1, 1), new Vector2(-460, -38), new Vector2(380, 44));
         dangerFill = UIStyle.Rect("Fill", bar.transform).gameObject.AddComponent<Image>();
         dangerFill.sprite = UIStyle.RoundedSprite(12, 0, Color.white, Color.white);
         dangerFill.type = Image.Type.Sliced;
         dangerFill.color = UIStyle.Ink;
+        dangerFill.raycastTarget = false;
         var fr = dangerFill.rectTransform;
         fr.anchorMin = Vector2.zero;
         fr.anchorMax = new Vector2(0.05f, 1);
@@ -108,21 +136,39 @@ public class GameHUD : MonoBehaviour
             UIStyle.Anchor(keyIcons[i].rectTransform, new Vector2(1, 1), new Vector2(-40 - (keyIcons.Length - 1 - i) * 52, -38), new Vector2(44, 44));
             keyIcons[i].gameObject.AddComponent<Outline>().effectColor = UIStyle.Ink;
         }
+
+        // Phones have no Esc key, so give them a pause button.
+        if (touch)
+        {
+            var pause = UIStyle.Panel("Pause", root, radius: 18, border: 4);
+            UIStyle.Anchor(pause.rectTransform, new Vector2(1, 1), new Vector2(-40, -110), new Vector2(96, 76));
+            pause.gameObject.AddComponent<Button>().onClick.AddListener(() =>
+            {
+                AudioManager.Instance?.Click();
+                gm.Pause();
+            });
+            var label = UIStyle.Label("Text", pause.transform, 34, UIStyle.Paper);
+            label.text = "II";
+            UIStyle.Stretch(label.rectTransform);
+        }
     }
 
-    void BuildBottom(RectTransform root)
+    void BuildBottom(RectTransform root, bool touch)
     {
-        // Stamina
         var back = UIStyle.Panel("Stamina", root, radius: 12, border: 4);
-        UIStyle.Anchor(back.rectTransform, new Vector2(0.5f, 0), new Vector2(0, 118), new Vector2(420, 26));
+        back.raycastTarget = false;
+        UIStyle.Anchor(back.rectTransform, new Vector2(0.5f, 0), new Vector2(0, touch ? 50 : 118), new Vector2(420, 26));
         staminaFillImage = UIStyle.Rect("Fill", back.transform).gameObject.AddComponent<Image>();
         staminaFillImage.sprite = UIStyle.RoundedSprite(8, 0, Color.white, Color.white);
         staminaFillImage.type = Image.Type.Sliced;
+        staminaFillImage.raycastTarget = false;
         staminaFill = staminaFillImage.rectTransform;
         staminaFill.anchorMin = Vector2.zero;
         staminaFill.anchorMax = Vector2.one;
         staminaFill.offsetMin = new Vector2(6, 6);
         staminaFill.offsetMax = new Vector2(-6, -6);
+
+        if (touch) return; // on-screen controls replace the keyboard prompts
 
         var prompts = UIStyle.Rect("Prompts", root);
         UIStyle.Anchor(prompts, new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(1200, 64));
@@ -136,33 +182,11 @@ public class GameHUD : MonoBehaviour
         UIStyle.Prompt(prompts, "SHIFT", "SPRINT", out _).sizeDelta = new Vector2(260, 60);
     }
 
-    void BuildBanner(RectTransform root)
-    {
-        banner = UIStyle.Panel("Banner", root, radius: 30, border: 6);
-        var rt = banner.rectTransform;
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0, 60);
-        var layout = banner.gameObject.AddComponent<HorizontalLayoutGroup>();
-        layout.padding = new RectOffset(70, 70, 44, 44);
-        layout.childControlWidth = layout.childControlHeight = true;
-        var fitter = banner.gameObject.AddComponent<ContentSizeFitter>();
-        fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        bannerText = UIStyle.Label("Text", banner.transform, 56, UIStyle.Paper);
-        banner.gameObject.SetActive(false);
-    }
-
     public void ShowMessage(string text, float seconds)
     {
         messageText.text = text.ToUpperInvariant();
         messagePanel.gameObject.SetActive(true);
         messageUntil = Time.time + seconds;
-    }
-
-    public void ShowBanner(string text)
-    {
-        bannerText.text = text.ToUpperInvariant();
-        banner.gameObject.SetActive(true);
-        messagePanel.gameObject.SetActive(false);
     }
 
     void Update()
@@ -192,12 +216,24 @@ public class GameHUD : MonoBehaviour
         var fr = dangerFill.rectTransform;
         fr.anchorMax = new Vector2(Mathf.Lerp(fr.anchorMax.x, Mathf.Max(0.05f, danger), Time.deltaTime * 6f), 1);
         dangerFill.color = danger >= 0.99f ? UIStyle.Danger : UIStyle.Ink;
+        eyeIcon.color = gm.HuntActive ? UIStyle.Danger : UIStyle.Paper;
 
         if (!gm.IsOver && chased != wasChased)
         {
             ShowMessage(chased ? "A GHOST SPOTTED YOU!\nBREAK LINE OF SIGHT" : "YOU LOST THEM...\nSTAY OUT OF SIGHT", 3f);
             wasChased = chased;
         }
+
+        // Red edges pulse while chased; a steady red glow during the hunt.
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f);
+        float vignette = chased ? Mathf.Lerp(0.35f, 0.75f, pulse) : gm.HuntActive ? 0.3f : 0f;
+        if (gm.IsOver) vignette = 0f;
+        var vc = chaseVignette.color;
+        float a = Mathf.MoveTowards(vc.a, vignette, Time.unscaledDeltaTime * 2.5f);
+        chaseVignette.color = new Color(0.85f, 0.05f, 0.03f, a);
+
+        float fk = flashDuration > 0f ? Mathf.Clamp01((Time.unscaledTime - flashStart) / flashDuration) : 1f;
+        flash.color = new Color(flashColor.r, flashColor.g, flashColor.b, flashColor.a * (1f - fk));
 
         if (player != null)
         {

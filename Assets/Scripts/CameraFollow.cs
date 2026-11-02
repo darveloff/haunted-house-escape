@@ -3,6 +3,7 @@ using UnityEngine;
 // High-angle follow camera. The kit has no ceilings, so looking down works well.
 // Also carries the "ears" (AudioListener) at the player so 3D ghost sounds are heard
 // from the player's position, panned to match the screen.
+// Supports a screen shake and a short "look over there" focus (used for the exit door).
 public class CameraFollow : MonoBehaviour
 {
     public Transform target;
@@ -13,9 +14,27 @@ public class CameraFollow : MonoBehaviour
     Vector3 velocity;
     float orbit;
 
+    float shakeAmount, shakeUntil, shakeDuration;
+    Vector3 focusPoint;
+    float focusUntil;
+
     void Start()
     {
         if (target != null) transform.position = target.position + offset;
+    }
+
+    public void Shake(float amount, float duration)
+    {
+        shakeAmount = amount;
+        shakeDuration = duration;
+        shakeUntil = Time.unscaledTime + duration;
+    }
+
+    // Temporarily look at a point (real-time seconds), then glide back to the player.
+    public void FocusOn(Vector3 point, float duration)
+    {
+        focusPoint = point;
+        focusUntil = Time.unscaledTime + duration;
     }
 
     void LateUpdate()
@@ -33,8 +52,18 @@ public class CameraFollow : MonoBehaviour
             return;
         }
 
-        transform.position = Vector3.SmoothDamp(transform.position, target.position + offset, ref velocity, smoothTime);
-        transform.LookAt(target.position + Vector3.up);
+        Vector3 lookAt = Time.unscaledTime < focusUntil ? focusPoint : target.position;
+        Vector3 goal = lookAt + offset;
+        // Unscaled so the exit-door pan still moves during the slow-motion moment.
+        transform.position = Vector3.SmoothDamp(transform.position, goal, ref velocity, smoothTime * (Time.unscaledTime < focusUntil ? 3f : 1f),
+            Mathf.Infinity, Time.unscaledDeltaTime);
+        transform.LookAt(transform.position - offset + Vector3.up);
+
+        if (Time.unscaledTime < shakeUntil)
+        {
+            float k = (shakeUntil - Time.unscaledTime) / shakeDuration;
+            transform.position += Random.insideUnitSphere * shakeAmount * k;
+        }
 
         if (ears != null)
         {

@@ -10,6 +10,8 @@ public class PlayerController : MonoBehaviour
     public float turnSpeed = 720f;
     public float gravity = -20f;
 
+    public float noiseRadius = 7f; // typical ghost hearing range, shown by the sprint ring
+
     public float maxStamina = 100f;
     public float staminaDrain = 25f;
     public float staminaRegen = 22f;
@@ -48,7 +50,7 @@ public class PlayerController : MonoBehaviour
         var k = Keyboard.current;
 
         Vector2 input = gameOver ? Vector2.zero : ReadMove();
-        bool sprintHeld = !gameOver && k != null && k.leftShiftKey.isPressed;
+        bool sprintHeld = !gameOver && ((k != null && k.leftShiftKey.isPressed) || VirtualInput.Sprint);
 
         Vector3 forward = cameraTransform != null ? cameraTransform.forward : Vector3.forward;
         Vector3 right = cameraTransform != null ? cameraTransform.right : Vector3.right;
@@ -81,6 +83,8 @@ public class PlayerController : MonoBehaviour
             {
                 stepDistance = 0f;
                 AudioManager.Instance?.Footstep(IsSprinting);
+                // Sprinting is loud: show roughly how far ghosts can hear it.
+                if (IsSprinting) WorldFX.Ring(transform.position + Vector3.up * 0.08f, new Color(0.6f, 0.85f, 1f, 0.55f), 1f, noiseRadius * 2f, 0.7f);
             }
         }
 
@@ -107,6 +111,7 @@ public class PlayerController : MonoBehaviour
             if (k.aKey.isPressed || k.leftArrowKey.isPressed) v.x -= 1;
         }
         if (Gamepad.current != null) v += Gamepad.current.leftStick.ReadValue();
+        v += VirtualInput.Move;
         return Vector2.ClampMagnitude(v, 1f);
     }
 }

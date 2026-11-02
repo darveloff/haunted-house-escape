@@ -15,9 +15,19 @@ public static class WebGLBuilder
     const string OutputDir = "Builds/WebGL";
     const string PendingKey = "HauntedHouse.BuildWebGLAfterSwitch";
 
+    // Responsive page in Assets/WebGLTemplates/Responsive: game fills the window at 16:9.
+    const string Template = "PROJECT:Responsive";
+
     // Switching platform reloads scripts, so the build resumes here afterwards.
     static WebGLBuilder()
     {
+        // Keep the saved project setting pointing at our template (the cloud build reads it).
+        if (PlayerSettings.WebGL.template != Template)
+        {
+            PlayerSettings.WebGL.template = Template;
+            AssetDatabase.SaveAssets();
+        }
+
         if (!SessionState.GetBool(PendingKey, false)) return;
         SessionState.SetBool(PendingKey, false);
         EditorApplication.delayCall += () =>
@@ -67,7 +77,7 @@ public static class WebGLBuilder
         PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
         PlayerSettings.WebGL.decompressionFallback = true;
         PlayerSettings.WebGL.dataCaching = true;
-        PlayerSettings.WebGL.template = "APPLICATION:Default";
+        PlayerSettings.WebGL.template = Template;
         // Smaller generated code: less disk needed while building and a lighter download.
         var web = UnityEditor.Build.NamedBuildTarget.WebGL;
         PlayerSettings.SetIl2CppCodeGeneration(web, UnityEditor.Build.Il2CppCodeGeneration.OptimizeSize);

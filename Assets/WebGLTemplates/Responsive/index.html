@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #08080c;
+        font-family: "Arial Rounded MT Bold", "Nunito", "Helvetica Neue", Arial, sans-serif;
+        color: #f7f7fa;
+      }
+      /* The game keeps a 16:9 frame, scaled to fit the window (or iframe), centred with bars. */
+      #unity-canvas {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        background: #08080c;
+        outline: none;
+        display: block;
+      }
+      #loading {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2.2vmin;
+        background: radial-gradient(circle at 50% 45%, #1b1b28 0%, #08080c 70%);
+        transition: opacity 0.4s;
+        z-index: 2;
+      }
+      .sticker {
+        font-size: min(12vmin, 110px);
+        font-weight: 900;
+        line-height: 0.95;
+        text-align: center;
+        transform: rotate(-4deg);
+        text-shadow: 0.05em 0.05em 0 #18181d, -0.05em -0.05em 0 #18181d, 0.05em -0.05em 0 #18181d,
+                     -0.05em 0.05em 0 #18181d, 0 0.12em 0.15em rgba(0, 0, 0, 0.5);
+      }
+      .tag {
+        font-size: min(4.5vmin, 40px);
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        background: #ff524a;
+        border: 0.12em solid #f7f7fa;
+        border-radius: 0.5em;
+        padding: 0.15em 0.6em;
+        transform: rotate(5deg);
+        box-shadow: 0 0.2em 0 rgba(0, 0, 0, 0.45);
+      }
+      .bar {
+        width: min(60vmin, 520px);
+        height: min(4vmin, 34px);
+        margin-top: 3vmin;
+        border: 0.6vmin solid #f7f7fa;
+        border-radius: 999px;
+        background: #26262c;
+        padding: 0.5vmin;
+        box-sizing: border-box;
+      }
+      .bar-fill {
+        height: 100%;
+        width: 0%;
+        border-radius: 999px;
+        background: #8cd9ff;
+        transition: width 0.2s;
+      }
+      .hint {
+        font-size: min(2.6vmin, 22px);
+        opacity: 0.75;
+        letter-spacing: 0.04em;
+      }
+      #fullscreen {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        z-index: 3;
+        display: none;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 900;
+        letter-spacing: 0.05em;
+        color: #f7f7fa;
+        background: rgba(41, 41, 46, 0.92);
+        border: 3px solid #f7f7fa;
+        border-radius: 14px;
+        padding: 8px 14px;
+        cursor: pointer;
+        opacity: 0.55;
+        transition: opacity 0.15s, transform 0.15s;
+      }
+      #fullscreen:hover { opacity: 1; transform: scale(1.05); }
+    </style>
+  </head>
+  <body>
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+
+    <div id="loading">
+      <div class="sticker">HAUNTED<br>HOUSE</div>
+      <div class="tag">ESCAPE</div>
+      <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+      <div class="hint" id="hint">LOADING 0%</div>
+    </div>
+
+    <button id="fullscreen" title="Fullscreen">⛶ FULLSCREEN</button>
+
+    <script src="Build/{{{ LOADER_FILENAME }}}"></script>
+    <script>
+      var canvas = document.getElementById("unity-canvas");
+      var loading = document.getElementById("loading");
+      var barFill = document.getElementById("bar-fill");
+      var hint = document.getElementById("hint");
+      var fullscreen = document.getElementById("fullscreen");
+      var ASPECT = 16 / 9;
+
+      // Biggest 16:9 rectangle that fits the window.
+      function fit() {
+        var w = window.innerWidth, h = window.innerHeight;
+        if (w / h > ASPECT) w = Math.round(h * ASPECT);
+        else h = Math.round(w / ASPECT);
+        canvas.style.width = w + "px";
+        canvas.style.height = h + "px";
+      }
+      window.addEventListener("resize", fit);
+      fit();
+
+      var touchOnly = matchMedia("(pointer: coarse)").matches && !matchMedia("(pointer: fine)").matches;
+
+      createUnityInstance(canvas, {
+        arguments: [],
+#if PROGRESSIVE_ASSET_LOADING
+        primaryDataUrls: {{{ JSON.stringify(PRIMARY_DATA_FILES) }}},
+        secondaryDataUrls: {{{ JSON.stringify(SECONDARY_DATA_FILES) }}},
+#else
+        dataUrl: "Build/{{{ DATA_FILENAME }}}",
+#endif
+        frameworkUrl: "Build/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_WASM
+        codeUrl: "Build/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: "Build/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+      }, function (progress) {
+        var pct = Math.round(progress * 100);
+        barFill.style.width = pct + "%";
+        hint.textContent = "LOADING " + pct + "%";
+      }).then(function (unityInstance) {
+        loading.style.opacity = "0";
+        setTimeout(function () { loading.style.display = "none"; }, 400);
+        fullscreen.style.display = "block";
+        fullscreen.onclick = function () { unityInstance.SetFullscreen(1); };
+        canvas.focus();
+        // Clicking the game gives it keyboard focus (needed inside an iframe embed).
+        canvas.addEventListener("pointerdown", function () { canvas.focus(); });
+      }).catch(function (message) {
+        hint.textContent = "COULDN'T LOAD THE GAME: " + message;
+      });
+
+      if (touchOnly) hint.textContent = "BEST PLAYED ON A COMPUTER WITH A KEYBOARD";
+    </script>
+  </body>
+</html>

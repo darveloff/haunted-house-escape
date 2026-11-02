@@ -30,16 +30,12 @@ jobs:
           haskell: true
           large-packages: false
           docker-images: false
-          swap-storage: true
+          swap-storage: false # keep swap as a memory safety net for Unity
 
       - uses: actions/checkout@v4
 
-      - name: Cache Library
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: Library-WebGL-
+      # No Library cache: restoring it made Unity get killed on startup (exit 137).
+      # A fresh import is slower but reliable.
 
       - name: Build WebGL
         uses: game-ci/unity-builder@v6

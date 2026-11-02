@@ -86,19 +86,24 @@
         z-index: 3;
         display: none;
         font: inherit;
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 900;
         letter-spacing: 0.05em;
         color: #f7f7fa;
         background: rgba(41, 41, 46, 0.92);
-        border: 3px solid #f7f7fa;
-        border-radius: 14px;
-        padding: 8px 14px;
+        border: 2px solid #f7f7fa;
+        border-radius: 10px;
+        padding: 5px 10px;
         cursor: pointer;
-        opacity: 0.55;
+        opacity: 0.4;
         transition: opacity 0.15s, transform 0.15s;
       }
       #fullscreen:hover { opacity: 1; transform: scale(1.05); }
+      /* Small windows / embeds: icon only, tucked further into the corner. */
+      @media (max-width: 900px) {
+        #fullscreen { right: 8px; bottom: 8px; padding: 4px 7px; }
+        #fullscreen .label { display: none; }
+      }
     </style>
   </head>
   <body>
@@ -111,7 +116,7 @@
       <div class="hint" id="hint">LOADING 0%</div>
     </div>
 
-    <button id="fullscreen" title="Fullscreen">⛶ FULLSCREEN</button>
+    <button id="fullscreen" title="Fullscreen">⛶<span class="label"> FULLSCREEN</span></button>
 
     <script src="Build/{{{ LOADER_FILENAME }}}"></script>
     <script>

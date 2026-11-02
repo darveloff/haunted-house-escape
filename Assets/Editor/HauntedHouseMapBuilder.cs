@@ -122,8 +122,6 @@ public static class HauntedHouseMapBuilder
         new[] { new Vector2(0, 21), new Vector2(1, 22), new Vector2(0, 23), new Vector2(-1, 22) },
     };
 
-    // Filled while building: places the player can hide (kit-space positions).
-    static readonly List<Vector2> hideSpots = new List<Vector2>();
 
     static Vector2Int[] P(params int[] xy)
     {
@@ -157,7 +155,6 @@ public static class HauntedHouseMapBuilder
         if (!AssetDatabase.IsValidFolder("Assets/HauntedHouse")) AssetDatabase.CreateFolder("Assets", "HauntedHouse");
         controllers.Clear();
         colliderMeshes.Clear();
-        hideSpots.Clear();
         keySpots.Clear();
         AssetDatabase.DeleteAsset(OutPath + "Colliders");
         AssetDatabase.CreateFolder("Assets/HauntedHouse", "Colliders");
@@ -176,7 +173,6 @@ public static class HauntedHouseMapBuilder
         BuildExit(map.transform);
         BakeNavMesh(map);
         BuildExitZone();
-        BuildHideSpots();
 
         BuildLighting();
         new GameObject("GameManager").AddComponent<GameManager>();
@@ -281,13 +277,12 @@ public static class HauntedHouseMapBuilder
             }
             SpawnKit(model, (Vector2)kv.Key * Cell, k, parent);
 
-            // Dead ends without a key or the exit become hiding spots, tucked against the back wall.
+            // Dead ends (except the exit) are candidate key spots, tucked against the back wall.
             int open = -1;
             for (int d = 0; d < 4; d++) if (kv.Value == 1 << d) open = d;
             if (open >= 0 && kv.Key != ExitCell)
             {
                 var spot = (Vector2)kv.Key * Cell - (Vector2)Dirs[open] * 0.8f;
-                hideSpots.Add(spot);
                 keySpots.Add(spot);
             }
         }
@@ -298,7 +293,7 @@ public static class HauntedHouseMapBuilder
     static readonly Vector2Int[] Quadrants = { new Vector2Int(1, 1), new Vector2Int(-1, 1), new Vector2Int(-1, -1), new Vector2Int(1, -1) };
 
     // Freestanding walls, pillars and corner nooks in each room quadrant, clear of the
-    // doorway lanes through the room centre. Corner nooks double as hiding spots.
+    // doorway lanes through the room centre. They give cover to break line of sight.
     static void BuildProps(Transform map)
     {
         var parent = new GameObject("Props").transform;
@@ -325,10 +320,10 @@ public static class HauntedHouseMapBuilder
                     if (variant == 0)
                     {
                         // Nook walls face the room centre; you slip in from the room corner side.
+                        // Its pocket is a candidate key spot.
                         int nookK = s.x > 0 ? (s.y > 0 ? 2 : 1) : (s.y > 0 ? 3 : 0);
                         Prop(parent, r, "template-corner", local, nookK);
                         var nook = (Vector2)r.c * Cell + RotateKit(local + RotateKit(new Vector2(-0.6f, -0.6f), nookK), r.k);
-                        hideSpots.Add(nook);
                         keySpots.Add(nook);
                     }
                     else if (variant == 1)
@@ -370,23 +365,6 @@ public static class HauntedHouseMapBuilder
     {
         for (int i = 0; i < k; i++) v = new Vector2(-v.y, v.x);
         return v;
-    }
-
-    // Created after the NavMesh bake so the triggers stay out of it.
-    static void BuildHideSpots()
-    {
-        var root = new GameObject("HideSpots").transform;
-        foreach (var pos in hideSpots)
-        {
-            var go = new GameObject("HideSpot");
-            go.transform.SetParent(root);
-            go.transform.position = ToWorld(pos);
-            var box = go.AddComponent<BoxCollider>();
-            box.isTrigger = true;
-            box.center = new Vector3(0, 1f, 0);
-            box.size = new Vector3(2.2f, 2f, 2.2f);
-            go.AddComponent<HideSpot>();
-        }
     }
 
     static bool PickCorridor(int mask, out string model, out int k)
@@ -752,7 +730,7 @@ public static class HauntedHouseMapBuilder
         return model;
     }
 
-    static readonly string[] LoopClips = { "idle", "walk", "sprint", "crouch" };
+    static readonly string[] LoopClips = { "idle", "walk", "sprint" };
 
     static void ConfigureCharacterImport(string fbx)
     {
@@ -798,7 +776,6 @@ public static class HauntedHouseMapBuilder
         var controller = AnimatorController.CreateAnimatorControllerAtPath(path);
         controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
         controller.AddParameter("Die", AnimatorControllerParameterType.Trigger);
-        controller.AddParameter("Hidden", AnimatorControllerParameterType.Bool);
 
         var sm = controller.layers[0].stateMachine;
         var tree = new BlendTree { name = "Locomotion", blendParameter = "Speed", useAutomaticThresholds = false };
@@ -809,17 +786,6 @@ public static class HauntedHouseMapBuilder
         var locomotion = sm.AddState("Locomotion");
         locomotion.motion = tree;
         sm.defaultState = locomotion;
-
-        var crouch = sm.AddState("Crouch");
-        crouch.motion = Find("crouch");
-        var toCrouch = locomotion.AddTransition(crouch);
-        toCrouch.AddCondition(AnimatorConditionMode.If, 0, "Hidden");
-        toCrouch.hasExitTime = false;
-        toCrouch.duration = 0.15f;
-        var fromCrouch = crouch.AddTransition(locomotion);
-        fromCrouch.AddCondition(AnimatorConditionMode.IfNot, 0, "Hidden");
-        fromCrouch.hasExitTime = false;
-        fromCrouch.duration = 0.15f;
 
         var die = sm.AddState("Die");
         die.motion = Find("die");

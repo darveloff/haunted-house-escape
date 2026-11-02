@@ -23,8 +23,6 @@ public class GameHUD : MonoBehaviour
 
     RectTransform staminaFill;
     Image staminaFillImage;
-    GameObject hidePrompt;
-    Text hideActionText;
 
     Image banner;
     Text bannerText;
@@ -136,9 +134,6 @@ public class GameHUD : MonoBehaviour
 
         UIStyle.Prompt(prompts, "WASD", "MOVE", out _).sizeDelta = new Vector2(230, 60);
         UIStyle.Prompt(prompts, "SHIFT", "SPRINT", out _).sizeDelta = new Vector2(260, 60);
-        var hide = UIStyle.Prompt(prompts, "E", "HIDE", out hideActionText);
-        hide.sizeDelta = new Vector2(200, 60);
-        hidePrompt = hide.gameObject;
     }
 
     void BuildBanner(RectTransform root)
@@ -208,9 +203,6 @@ public class GameHUD : MonoBehaviour
         {
             staminaFill.anchorMax = new Vector2(player.Stamina01, 1f);
             staminaFillImage.color = player.Stamina01 < 0.3f ? UIStyle.Danger : new Color(0.55f, 0.85f, 1f);
-            bool canHide = player.IsHidden || HideSpot.Current != null;
-            hidePrompt.SetActive(canHide && !gm.IsOver);
-            hideActionText.text = player.IsHidden ? "LEAVE" : "HIDE";
         }
     }
 }

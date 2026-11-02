@@ -35,7 +35,6 @@ public class GameManager : MonoBehaviour
 
     // Run stats for the end screen.
     public int TimesSpotted { get; private set; }
-    public int TimesHidden { get; private set; }
     public float TimeUsed => timeLimit - TimeLeft;
 
     public event Action AllKeysCollected;
@@ -131,7 +130,7 @@ public class GameManager : MonoBehaviour
         AudioListener.pause = false;
         menu.HideAll();
         hud.SetVisible(true);
-        ShowMessage($"FIND {keysRequired} KEYS AND ESCAPE\nHIDE FROM THE GHOSTS", 5f);
+        ShowMessage($"FIND {keysRequired} KEYS AND ESCAPE\nDON'T LET THE GHOSTS SEE YOU", 5f);
     }
 
     public void Pause()
@@ -190,7 +189,6 @@ public class GameManager : MonoBehaviour
     }
 
     public void CountSpotted() => TimesSpotted++;
-    public void CountHidden() => TimesHidden++;
 
     public void CollectKey()
     {

@@ -58,8 +58,6 @@ public class Minimap : MonoBehaviour
             exitMarker = UIStyle.Icon("Exit", map, UIStyle.RoundedSprite(6, 0, Color.white, Color.white), UIStyle.Danger, 18);
             exitMarker.type = Image.Type.Sliced;
         }
-        foreach (var spot in FindObjectsByType<HideSpot>(FindObjectsSortMode.None))
-            Place(UIStyle.Icon("Hide", map, UIStyle.DotIcon, new Color(0.65f, 0.85f, 1f, 0.8f), 11).rectTransform, spot.transform.position);
         foreach (var key in FindObjectsByType<KeyPickup>(FindObjectsSortMode.None))
             keys.Add((key.transform, UIStyle.Icon("Key", map, UIStyle.KeyIcon, UIStyle.Gold, 26).rectTransform));
         foreach (var ghost in FindObjectsByType<GhostAI>(FindObjectsSortMode.None))

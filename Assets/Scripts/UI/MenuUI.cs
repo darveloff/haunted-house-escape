@@ -11,8 +11,8 @@ public class MenuUI : MonoBehaviour
     {
         "WRAITHS ARE NEARLY BLIND.\nWALK PAST THEM - DON'T RUN.",
         "THE WATCHER SEES ACROSS ROOMS.\nKEEP A WALL BETWEEN YOU.",
-        "IF THE SCREAMER SPOTS YOU,\nEVERYONE COMES. HIDE FAST.",
-        "BLUE DOTS ON THE MAP ARE\nPLACES YOU CAN HIDE.",
+        "IF THE SCREAMER SPOTS YOU,\nEVERYONE COMES. RUN AND BREAK SIGHT.",
+        "DUCK BEHIND WALLS AND PILLARS.\nGHOSTS CAN'T SEE THROUGH THEM.",
         "THE RADAR SHOWS GHOSTS FOR\n5 SECONDS. PLAN YOUR ROUTE.",
     };
 
@@ -167,7 +167,6 @@ public class MenuUI : MonoBehaviour
         layout.childForceExpandWidth = false;
         UIStyle.Prompt(row, "WASD", "MOVE", out _).sizeDelta = new Vector2(220, 60);
         UIStyle.Prompt(row, "SHIFT", "SPRINT", out _).sizeDelta = new Vector2(250, 60);
-        UIStyle.Prompt(row, "E", "HIDE", out _).sizeDelta = new Vector2(170, 60);
         UIStyle.Prompt(row, "ESC", "PAUSE", out _).sizeDelta = new Vector2(220, 60);
     }
 
@@ -427,7 +426,6 @@ public class MenuUI : MonoBehaviour
         Stat(stats, UIStyle.HourglassIcon, $"{used / 60:00}:{used % 60:00}", "TIME", 0.35f);
         Stat(stats, UIStyle.KeyIcon, $"{gm.KeysCollected}/{gm.keysRequired}", "KEYS", 0.42f);
         Stat(stats, UIStyle.EyeIcon, gm.TimesSpotted.ToString(), "SPOTTED", 0.49f);
-        Stat(stats, UIStyle.GhostIcon, gm.TimesHidden.ToString(), "HIDES", 0.56f);
 
         var buttons = ButtonColumn(screen, new Vector2(120, -760), horizontal: true);
         UIStyle.PillButton(buttons, "R", "PLAY AGAIN", gm.Restart, 440);

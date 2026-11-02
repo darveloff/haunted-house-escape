@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-// Camera-relative WASD movement with sprint + stamina, and hiding in HideSpots with E.
+// Camera-relative WASD movement with sprint + stamina.
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
@@ -13,7 +13,6 @@ public class PlayerController : MonoBehaviour
     public float maxStamina = 100f;
     public float staminaDrain = 25f;
     public float staminaRegen = 22f;
-    public float hideBlockedDistance = 6f;
 
     public Animator animator;
     public Transform cameraTransform;
@@ -27,7 +26,6 @@ public class PlayerController : MonoBehaviour
 
     public float Stamina01 => stamina / maxStamina;
     public bool IsSprinting { get; private set; }
-    public bool IsHidden { get; private set; }
 
     void Awake()
     {
@@ -48,20 +46,6 @@ public class PlayerController : MonoBehaviour
         if (gmState == GameManager.State.Title || gmState == GameManager.State.Paused) return;
         bool gameOver = gmState == GameManager.State.Over;
         var k = Keyboard.current;
-
-        if (!gameOver && k != null && k.eKey.wasPressedThisFrame)
-        {
-            if (IsHidden) SetHidden(false);
-            else if (HideSpot.Current != null) TryHide(HideSpot.Current);
-        }
-
-        if (IsHidden)
-        {
-            IsSprinting = false;
-            stamina = Mathf.Min(maxStamina, stamina + staminaRegen * 1.5f * Time.deltaTime);
-            if (animator != null) animator.SetFloat("Speed", 0f, 0.1f, Time.deltaTime);
-            return;
-        }
 
         Vector2 input = gameOver ? Vector2.zero : ReadMove();
         bool sprintHeld = !gameOver && k != null && k.leftShiftKey.isPressed;
@@ -102,34 +86,6 @@ public class PlayerController : MonoBehaviour
 
         if (animator != null)
             animator.SetFloat("Speed", move.magnitude * (IsSprinting ? 2f : 1f), 0.1f, Time.deltaTime);
-    }
-
-    void TryHide(HideSpot spot)
-    {
-        foreach (var ghost in FindObjectsByType<GhostAI>(FindObjectsSortMode.None))
-        {
-            if (ghost.IsChasing && Vector3.Distance(ghost.transform.position, transform.position) < hideBlockedDistance)
-            {
-                GameManager.Instance?.ShowMessage("TOO LATE TO HIDE!\nTHEY'RE RIGHT BEHIND YOU", 2f);
-                return;
-            }
-        }
-
-        controller.enabled = false;
-        transform.position = new Vector3(spot.transform.position.x, transform.position.y, spot.transform.position.z);
-        controller.enabled = true;
-        SetHidden(true);
-    }
-
-    void SetHidden(bool hidden)
-    {
-        IsHidden = hidden;
-        if (animator != null) animator.SetBool("Hidden", hidden);
-        if (hidden)
-        {
-            GameManager.Instance?.ShowMessage("HIDING...\nHOLD YOUR BREATH", 2.5f);
-            GameManager.Instance?.CountHidden();
-        }
     }
 
     public void Die()

@@ -1,5 +1,5 @@
 # Builds the game for WebGL in the cloud and publishes it to GitHub Pages.
-# Needs repo secrets UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD (see README).
+# Needs repo secrets UNITY_EMAIL and UNITY_PASSWORD (a Unity ID login, 2FA off).
 name: Build WebGL & deploy to Pages
 
 on:
@@ -18,11 +18,11 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # pinned so the ubuntu-latest move to 26 can't break builds
     steps:
       # The Unity image plus a WebGL build need more room than a fresh runner has.
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@v2.0.0
         with:
           tool-cache: false
           android: true
@@ -32,7 +32,7 @@ jobs:
           docker-images: false
           swap-storage: false # keep swap as a memory safety net for Unity
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No Library cache: restoring it made Unity get killed on startup (exit 137).
       # A fresh import is slower but reliable.
@@ -40,7 +40,8 @@ jobs:
       - name: Build WebGL
         uses: game-ci/unity-builder@v6
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          # Activates with the Unity account. The .ulf licence file is machine-bound and
+          # can't be used on GitHub's runners, so it's not passed.
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
@@ -49,17 +50,17 @@ jobs:
           buildsPath: build
 
       - name: Upload site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: build/WebGL/HauntedHouse
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

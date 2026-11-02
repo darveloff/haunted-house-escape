@@ -13,7 +13,6 @@ A low-poly stealth escape game made in Unity 6. Sneak through a 14-room haunted 
 |---|---|
 | WASD / arrows | Move |
 | Shift | Sprint (uses stamina, and ghosts can hear it) |
-| E | Hide in a nook or dead end |
 | Esc | Pause |
 
 ## The ghosts
@@ -29,7 +28,7 @@ A low-poly stealth escape game made in Unity 6. Sneak through a 14-room haunted 
 
 - Modular map generated from a cell layout (rooms, corridors, auto-picked corner/T/cross pieces)
 - NavMesh ghost AI: view cones, line of sight, hearing, last-known-position search
-- Hiding spots, cover props, stamina, randomised key locations each run
+- Cover props to break line of sight, stamina, randomised key locations each run
 - Minimap drawn from the NavMesh with a 5-seconds-on / 5-seconds-off ghost radar
 - All UI, icons and sound effects generated in code — no imported UI art or audio files
 - Per-ghost visual effects (afterimages, sound-wave rings, scanning eye and vision cone)
@@ -42,7 +41,7 @@ A low-poly stealth escape game made in Unity 6. Sneak through a 14-room haunted 
 
 ## Cloud build
 
-Every push to `main` builds WebGL with [GameCI](https://game.ci) and deploys it to GitHub Pages (`.github/workflows/webgl.yml`). It needs three repository secrets: `UNITY_LICENSE` (contents of your `.ulf` licence file), `UNITY_EMAIL` and `UNITY_PASSWORD`.
+Every push to `main` builds WebGL with [GameCI](https://game.ci) and deploys it to GitHub Pages (`.github/workflows/webgl.yml`). It needs two repository secrets: `UNITY_EMAIL` and `UNITY_PASSWORD` (a Unity ID login with two-factor authentication off).
 
 ## Credits
 

@@ -176,7 +176,7 @@ public class GhostAI : MonoBehaviour
 
         Vector3 toPlayer = player.transform.position - transform.position;
         toPlayer.y = 0f;
-        if (!player.IsHidden && toPlayer.magnitude < catchDistance)
+        if (toPlayer.magnitude < catchDistance)
         {
             player.Die();
             gm?.LoseCaught(kind);
@@ -240,7 +240,6 @@ public class GhostAI : MonoBehaviour
 
     bool CanDetectPlayer()
     {
-        if (player.IsHidden) return false;
         var p = Profile;
 
         Vector3 eye = transform.position + Vector3.up;

@@ -34,14 +34,38 @@ jobs:
 
       - uses: actions/checkout@v7
 
-      # No Library cache: restoring it made Unity get killed on startup (exit 137).
-      # A fresh import is slower but reliable.
+      # Cached Library (Unity's imported project) skips most of the import time.
+      - name: Cache Library
+        uses: actions/cache@v6
+        with:
+          path: Library
+          key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-WebGL-
 
       - name: Build WebGL
+        id: build
+        continue-on-error: true
         uses: game-ci/unity-builder@v6
         env:
           # Activates with the Unity account. The .ulf licence file is machine-bound and
           # can't be used on GitHub's runners, so it's not passed.
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: WebGL
+          buildName: HauntedHouse
+          buildsPath: build
+
+      # Safety net: if the cached Library made the build fail, throw it away and
+      # rebuild from a clean import in the same run.
+      - name: Clear cached Library after failure
+        if: steps.build.outcome == 'failure'
+        run: sudo rm -rf Library build
+
+      - name: Build WebGL (clean retry)
+        if: steps.build.outcome == 'failure'
+        uses: game-ci/unity-builder@v6
+        env:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:

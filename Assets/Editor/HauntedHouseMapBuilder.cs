@@ -52,7 +52,7 @@ public static class HauntedHouseMapBuilder
     {
         new Room("Foyer",       "room-large",           0,  0),
         new Room("Kitchen",     "room-wide",           -8,  0),
-        new Room("Dining",      "room-wide-variation",  8,  0),
+        new Room("Dining",      "room-wide",            8,  0), // not the -variation: its N/S doorways are walled off inside
         new Room("Pantry",      "room-small",         -14,  0),
         new Room("Garage",      "room-small-variation", 14, 0),
         new Room("GreatHall",   "room-large",           0,  8),
@@ -172,6 +172,7 @@ public static class HauntedHouseMapBuilder
         BuildProps(map.transform);
         BuildExit(map.transform);
         BakeNavMesh(map);
+        CheckReachability();
         BuildExitZone();
 
         BuildLighting();
@@ -1072,6 +1073,38 @@ public static class HauntedHouseMapBuilder
     }
 
     // ---------------------------------------------------------------- keys
+
+    // Walks the baked NavMesh from the player spawn to every room, doorway and key spot.
+    // Unreachable key spots are dropped (so a key can never spawn somewhere sealed off),
+    // and unreachable rooms/doorways are reported so layout problems show up immediately.
+    static void CheckReachability()
+    {
+        Vector3 start = CellToWorld(PlayerSpawn);
+        var path = new NavMeshPath();
+        bool Reachable(Vector3 world)
+        {
+            if (!NavMesh.SamplePosition(world, out var hit, 1.5f, NavMesh.AllAreas)) return false;
+            return NavMesh.CalculatePath(start, hit.position, NavMesh.AllAreas, path) && path.status == NavMeshPathStatus.PathComplete;
+        }
+
+        int problems = 0;
+        foreach (var r in Rooms)
+        {
+            if (!Reachable(CellToWorld(r.c))) { Debug.LogWarning($"HauntedHouse: room {r.name} can't be reached"); problems++; }
+            var h = r.Half;
+            for (int d = 0; d < 4; d++)
+            {
+                var door = r.c + new Vector2Int(Dirs[d].x * (h.x + 1), Dirs[d].y * (h.y + 1));
+                if (door == ExitCell) continue; // behind the locked exit gate on purpose
+                if (!Reachable(CellToWorld(door))) { Debug.LogWarning($"HauntedHouse: {r.name}'s doorway at {door} can't be reached"); problems++; }
+            }
+        }
+
+        int before = keySpots.Count;
+        keySpots.RemoveAll(spot => !Reachable(ToWorld(spot)));
+        if (keySpots.Count < before) Debug.LogWarning($"HauntedHouse: dropped {before - keySpots.Count} unreachable key spots");
+        Debug.Log($"HauntedHouse: reachability check - {problems} unreachable rooms/doorways, {keySpots.Count} reachable key spots");
+    }
 
     static void BuildKeys()
     {
